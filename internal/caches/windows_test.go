@@ -192,6 +192,16 @@ func TestToolPathAndClean(t *testing.T) {
 	}
 }
 
+// A package manager can print an update notice before the path.
+func TestToolPathIsTheLastLine(t *testing.T) {
+	pnpm, _ := FindTool("pnpm")
+	f := run.NewFake().On(run.Out("Update available! 9.0.0\r\nC:\\Users\\dev\\AppData\\Local\\pnpm\\store\\v3\r\n"), "pnpm", "store", "path")
+	got, err := ToolPath(context.Background(), f, pnpm)
+	if err != nil || got != `C:\Users\dev\AppData\Local\pnpm\store\v3` {
+		t.Fatalf("got %q, %v", got, err)
+	}
+}
+
 func TestToolCleanReportsFailure(t *testing.T) {
 	pnpm, _ := FindTool("pnpm")
 	f := run.NewFake().On(run.Exit(1, "ERR_PNPM"), "pnpm", "store", "prune")

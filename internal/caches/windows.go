@@ -223,6 +223,8 @@ func FindTool(tool string) (ToolCache, bool) {
 	return ToolCache{}, false
 }
 
+// ToolPath asks a package manager where its cache is. The path is the last
+// line it prints, so an update notice printed before it is ignored.
 func ToolPath(ctx context.Context, r run.Runner, t ToolCache) (string, error) {
 	res, err := r.Run(ctx, t.Tool, t.PathArgs...)
 	if err != nil {
@@ -231,7 +233,13 @@ func ToolPath(ctx context.Context, r run.Runner, t ToolCache) (string, error) {
 	if res.Code != 0 {
 		return "", fmt.Errorf("%s: exit %d", run.Key(t.Tool, t.PathArgs...), res.Code)
 	}
-	return strings.TrimSpace(string(res.Stdout)), nil
+	path := ""
+	for _, line := range strings.Split(string(res.Stdout), "\n") {
+		if line = strings.TrimSpace(line); line != "" {
+			path = line
+		}
+	}
+	return path, nil
 }
 
 func ToolClean(ctx context.Context, r run.Runner, t ToolCache) error {
