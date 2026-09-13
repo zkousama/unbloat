@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/zkousama/unbloat/internal/caches"
@@ -104,10 +105,27 @@ func (e Executor) Execute(ctx context.Context, s plan.Step) (int64, error) {
 	return 0, fmt.Errorf("unbloat does not know how to run %q", s.ID)
 }
 
-// stop stops Docker Desktop with its own command, then shuts WSL down. If
-// Docker Desktop does not stop, WSL is left running and nothing is compacted.
+// desktopRunning reports whether a Docker Desktop process exists, whatever its
+// engine is doing. The image name in tasklist's output is not localized. If
+// tasklist cannot answer, it assumes Docker Desktop is running.
+func (e Executor) desktopRunning(ctx context.Context) bool {
+	res, err := e.Runner.Run(ctx, "tasklist.exe", "/FI", "IMAGENAME eq Docker Desktop.exe", "/FO", "CSV", "/NH")
+	if err != nil || res.Code != 0 {
+		return true
+	}
+	return strings.Contains(string(res.Stdout), `"Docker Desktop.exe"`)
+}
+
+// stop checks both the Docker Desktop process and its engine, and stops
+// Docker Desktop with its own command before shutting WSL down. If Docker
+// Desktop does not stop, WSL is left running and nothing is compacted.
 func (e Executor) stop(ctx context.Context) error {
-	if e.Docker != nil && e.Docker.Running(ctx) {
+	desktop := e.desktopRunning(ctx)
+	engine := e.Docker != nil && e.Docker.Running(ctx)
+	if desktop || engine {
+		if e.Docker == nil {
+			return errors.New("Docker Desktop is running, but docker.exe was not found to stop it, so nothing was shut down. Quit it from its tray icon and run unbloat again")
+		}
 		if err := e.Docker.Stop(ctx); err != nil {
 			return fmt.Errorf("Docker Desktop did not stop, so nothing was shut down. Quit it from its tray icon and run unbloat again. (%v)", err)
 		}

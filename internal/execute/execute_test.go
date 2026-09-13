@@ -2,6 +2,7 @@ package execute
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -120,18 +121,27 @@ func TestTrimRunsAsRootInTheDistroThatOwnsTheDisk(t *testing.T) {
 
 var stop = plan.Step{ID: "stop", Phase: plan.PhaseStop}
 
+const (
+	desktopUp   = "\"Docker Desktop.exe\",\"10432\",\"Console\",\"1\",\"152,344 K\"\r\n"
+	desktopDown = "INFO: No tasks are running which match the specified criteria.\r\n"
+)
+
+func tasklist(f *run.Fake, out string) *run.Fake {
+	return f.On(run.Out(out), "tasklist.exe", "/FI", "IMAGENAME eq Docker Desktop.exe", "/FO", "CSV", "/NH")
+}
+
 func TestStopStopsDockerDesktopBeforeWSL(t *testing.T) {
-	f := run.NewFake().
+	f := tasklist(run.NewFake(), desktopUp).
 		On(run.Out("29.6.1"), dockerExe, "info", "--format", "{{.ServerVersion}}").
 		On(run.Out(""), dockerExe, "desktop", "stop").
 		On(run.Out(""), "wsl.exe", "--shutdown")
-	e := Executor{WSL: wsl.Client{R: f}, Docker: &docker.Client{R: f, Exe: dockerExe}}
+	e := Executor{WSL: wsl.Client{R: f}, Docker: &docker.Client{R: f, Exe: dockerExe}, Runner: f}
 
 	if _, err := e.Execute(context.Background(), stop); err != nil {
 		t.Fatal(err)
 	}
 	calls := f.Calls()
-	if len(calls) != 3 || !strings.HasSuffix(calls[1], "desktop stop") || calls[2] != "wsl.exe --shutdown" {
+	if len(calls) != 4 || !strings.HasSuffix(calls[2], "desktop stop") || calls[3] != "wsl.exe --shutdown" {
 		t.Fatalf("calls = %v", calls)
 	}
 }
@@ -139,10 +149,10 @@ func TestStopStopsDockerDesktopBeforeWSL(t *testing.T) {
 // Nothing is compacted without a clean stop, and WSL is not shut down under a
 // Docker Desktop that is still running.
 func TestAFailedDockerStopLeavesWSLRunning(t *testing.T) {
-	f := run.NewFake().
+	f := tasklist(run.NewFake(), desktopUp).
 		On(run.Out("29.6.1"), dockerExe, "info", "--format", "{{.ServerVersion}}").
 		On(run.Exit(1, "timed out"), dockerExe, "desktop", "stop")
-	e := Executor{WSL: wsl.Client{R: f}, Docker: &docker.Client{R: f, Exe: dockerExe}}
+	e := Executor{WSL: wsl.Client{R: f}, Docker: &docker.Client{R: f, Exe: dockerExe}, Runner: f}
 
 	_, err := e.Execute(context.Background(), stop)
 	if err == nil || !strings.Contains(err.Error(), "tray") {
@@ -156,9 +166,71 @@ func TestAFailedDockerStopLeavesWSLRunning(t *testing.T) {
 }
 
 func TestStopWithoutDockerOnlyShutsDownWSL(t *testing.T) {
-	f := run.NewFake().On(run.Out(""), "wsl.exe", "--shutdown")
-	if _, err := (Executor{WSL: wsl.Client{R: f}}).Execute(context.Background(), stop); err != nil {
+	f := tasklist(run.NewFake(), desktopDown).On(run.Out(""), "wsl.exe", "--shutdown")
+	e := Executor{WSL: wsl.Client{R: f}, Runner: f}
+	if _, err := e.Execute(context.Background(), stop); err != nil {
 		t.Fatal(err)
+	}
+	calls := f.Calls()
+	if len(calls) != 2 || calls[1] != "wsl.exe --shutdown" {
+		t.Fatalf("calls = %v", calls)
+	}
+}
+
+// A hung, starting or failing engine is not a stopped Docker Desktop: the
+// process still shows up in tasklist, so it is still stopped properly.
+func TestAHungEngineStillStopsDockerDesktopFirst(t *testing.T) {
+	f := tasklist(run.NewFake(), desktopUp).
+		On(run.Exit(1, ""), dockerExe, "info", "--format", "{{.ServerVersion}}").
+		On(run.Out(""), dockerExe, "desktop", "stop").
+		On(run.Out(""), "wsl.exe", "--shutdown")
+	e := Executor{WSL: wsl.Client{R: f}, Docker: &docker.Client{R: f, Exe: dockerExe}, Runner: f}
+
+	if _, err := e.Execute(context.Background(), stop); err != nil {
+		t.Fatal(err)
+	}
+	calls := f.Calls()
+	stopIdx, shutdownIdx := -1, -1
+	for i, c := range calls {
+		if strings.HasSuffix(c, "desktop stop") {
+			stopIdx = i
+		}
+		if c == "wsl.exe --shutdown" {
+			shutdownIdx = i
+		}
+	}
+	if stopIdx == -1 || shutdownIdx == -1 || stopIdx > shutdownIdx {
+		t.Fatalf("calls = %v", calls)
+	}
+}
+
+func TestDockerDesktopWithoutDockerExeLeavesWSLRunning(t *testing.T) {
+	f := tasklist(run.NewFake(), desktopUp)
+	e := Executor{WSL: wsl.Client{R: f}, Runner: f}
+
+	_, err := e.Execute(context.Background(), stop)
+	if err == nil || !strings.Contains(err.Error(), "tray") {
+		t.Fatalf("err = %v", err)
+	}
+	for _, c := range f.Calls() {
+		if c == "wsl.exe --shutdown" {
+			t.Fatal("WSL was shut down while Docker Desktop was running")
+		}
+	}
+}
+
+func TestUnreadableTasklistCountsAsDockerDesktopRunning(t *testing.T) {
+	f := run.NewFake().Fails(errors.New("not found"), "tasklist.exe", "/FI", "IMAGENAME eq Docker Desktop.exe", "/FO", "CSV", "/NH")
+	e := Executor{WSL: wsl.Client{R: f}, Runner: f}
+
+	_, err := e.Execute(context.Background(), stop)
+	if err == nil {
+		t.Fatal("expected an error when tasklist could not answer")
+	}
+	for _, c := range f.Calls() {
+		if c == "wsl.exe --shutdown" {
+			t.Fatal("WSL was shut down when tasklist could not answer")
+		}
 	}
 }
 
