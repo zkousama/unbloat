@@ -247,6 +247,24 @@ func TestNothingFromDockerWhenItIsNotRunning(t *testing.T) {
 	}
 }
 
+// %TEMP% can fall back to a folder that isn't a temp folder at all. It's
+// refused before anything under it is read.
+func TestATempFolderThatIsNotOneIsRefused(t *testing.T) {
+	src := sources(t, recordedMachine(t), &sys.FakeFacts{IsElevated: true})
+	src.Temp = `C:\Data`
+	src.UserProfile, src.SystemRoot = `C:\Users\dev`, `C:\Windows`
+	p := Scan(context.Background(), src, nil)
+
+	note, ok := find(p, "win:temp:refused")
+	if !ok || note.Kind != plan.KindNote || note.Section != "Caches on Windows" ||
+		note.Title != "%TEMP% is not offered" || note.Detail != `It points at C:\Data, which doesn't look like a temp folder.` {
+		t.Errorf("note = %+v", note)
+	}
+	if _, ok := find(p, "win:temp"); ok {
+		t.Error("offered a folder that isn't a temp folder")
+	}
+}
+
 func TestAFailedPartDoesNotStopTheScan(t *testing.T) {
 	f := recordedMachine(t).On(run.Exit(1, ""), "wsl.exe", "-d", "Ubuntu", "-e", "sh", "-c", caches.MeasureScript(caches.WSLCaches))
 	var failed []string

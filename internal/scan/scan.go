@@ -39,6 +39,8 @@ type Sources struct {
 	LookPath     func(file string) (string, error)
 	Stat         func(path string) (size int64, ok bool)
 	LocalAppData string
+	UserProfile  string
+	SystemRoot   string
 	Temp         string
 	Now          time.Time
 }
@@ -87,7 +89,13 @@ func (s *scanner) fail(target string, err error) {
 
 func (s *scanner) windows(ctx context.Context) {
 	if s.src.Temp != "" {
-		if old, err := caches.OldFiles(s.src.Temp, s.src.Now.Add(-TempAge)); err != nil {
+		if !caches.IsTempDir(s.src.Temp, s.src.UserProfile, s.src.SystemRoot, s.src.LocalAppData) {
+			s.items = append(s.items, plan.Item{
+				ID: "win:temp:refused", Section: sectionWindows, Kind: plan.KindNote,
+				Title:  "%TEMP% is not offered",
+				Detail: "It points at " + s.src.Temp + ", which doesn't look like a temp folder.",
+			})
+		} else if old, err := caches.OldFiles(s.src.Temp, s.src.Now.Add(-TempAge)); err != nil {
 			s.fail("%TEMP%", err)
 		} else if old > 0 {
 			s.items = append(s.items, plan.Item{

@@ -139,6 +139,42 @@ func TestWindowsCachePaths(t *testing.T) {
 	}
 }
 
+// os.TempDir() falls back through TMP, TEMP, USERPROFILE and the Windows
+// directory, so the folder the temp cleanup is given has to be checked. The
+// answer is the same on every OS.
+func TestIsTempDir(t *testing.T) {
+	const (
+		profile = `C:\Users\dev`
+		windows = `C:\Windows`
+		local   = `C:\Users\dev\AppData\Local`
+	)
+	for path, want := range map[string]bool{
+		`C:\Users\dev\AppData\Local\Temp`:   true,
+		`C:\Users\dev\AppData\Local\Temp\2`: true,
+		`c:\users\DEV\appdata\local\temp\`:  true,
+		`/tmp/unbloat-x`:                    true,
+
+		`C:\`:                                   false,
+		`D:\`:                                   false,
+		`C:`:                                    false,
+		`Temp`:                                  false,
+		`relative\Temp`:                         false,
+		`\\server\share\Temp`:                   false,
+		`C:\Users\dev`:                          false,
+		`C:\Users`:                              false,
+		`C:\Users\dev\AppData\Local`:            false,
+		`C:\Windows`:                            false,
+		`C:\Windows\Temp`:                       false,
+		`C:\Data`:                               false,
+		``:                                      false,
+		`C:\Users\dev\AppData\Local\Temp\..\..`: false,
+	} {
+		if got := IsTempDir(path, profile, windows, local); got != want {
+			t.Errorf("IsTempDir(%q) = %v, want %v", path, got, want)
+		}
+	}
+}
+
 func TestToolPathAndClean(t *testing.T) {
 	yarn, ok := FindTool("yarn")
 	if !ok {

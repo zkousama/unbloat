@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -30,6 +31,8 @@ type Executor struct {
 	Compactor    vhd.Compactor
 	Facts        sys.Facts
 	LocalAppData string
+	UserProfile  string
+	SystemRoot   string
 	Stat         func(path string) (int64, bool)
 	Now          func() time.Time
 	Sleep        func(time.Duration)
@@ -52,10 +55,13 @@ func (e Executor) Execute(ctx context.Context, s plan.Step) (int64, error) {
 
 	switch it.Kind {
 	case plan.KindWindowsTemp:
+		if !caches.IsTempDir(it.Path, e.UserProfile, e.SystemRoot, e.LocalAppData) {
+			return 0, fmt.Errorf("refusing to delete from %s: it doesn't look like a temp folder", it.Path)
+		}
 		return caches.RemoveOldFiles(it.Path, e.Now().Add(-scan.TempAge))
 
 	case plan.KindWindowsRemove:
-		if !caches.IsWindowsCachePath(e.LocalAppData, it.Path) {
+		if !filepath.IsAbs(it.Path) || !caches.IsWindowsCachePath(e.LocalAppData, it.Path) {
 			return 0, fmt.Errorf("refusing to delete %s: it is not a cache unbloat knows", it.Path)
 		}
 		return caches.RemoveOldFiles(it.Path, everything)
@@ -191,7 +197,8 @@ func (e Executor) Describe(s plan.Step) []string {
 
 	switch it.Kind {
 	case plan.KindWindowsTemp:
-		return []string{"delete files older than 7 days under " + it.Path + ", skipping open files and never following links"}
+		days := int(scan.TempAge / (24 * time.Hour))
+		return []string{fmt.Sprintf("delete files older than %d days under %s, skipping open files and never following links", days, it.Path)}
 	case plan.KindWindowsRemove:
 		return []string{"delete the files under " + it.Path + ", never following links"}
 	case plan.KindWindowsTool:

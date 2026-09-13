@@ -79,6 +79,8 @@ func start() int {
 		Compactor:    compactor,
 		Facts:        facts,
 		LocalAppData: local,
+		UserProfile:  os.Getenv("USERPROFILE"),
+		SystemRoot:   os.Getenv("SystemRoot"),
 		Stat:         stat,
 		Now:          time.Now,
 		UnlockTries:  15,
@@ -96,6 +98,8 @@ func start() int {
 			LookPath:     exec.LookPath,
 			Stat:         stat,
 			LocalAppData: local,
+			UserProfile:  os.Getenv("USERPROFILE"),
+			SystemRoot:   os.Getenv("SystemRoot"),
 			Temp:         os.TempDir(),
 			Now:          time.Now(),
 		}, report)

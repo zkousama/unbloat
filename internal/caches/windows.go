@@ -119,6 +119,76 @@ func IsWindowsCachePath(localAppData, path string) bool {
 	return false
 }
 
+// IsTempDir reports whether path looks like a temp folder whose old files may
+// be deleted. os.TempDir() falls back through TMP, TEMP, USERPROFILE and the
+// Windows directory, so it can return a profile or a drive root.
+//
+// path has to be absolute, below a root, named temp or tmp somewhere along
+// the way, outside the Windows directory, and neither the profile nor
+// %LOCALAPPDATA% nor a folder holding them. UNC paths and .. are refused. The
+// answer is the same on every OS: \ and / are both separators, and case is
+// ignored.
+func IsTempDir(path, userProfile, systemRoot, localAppData string) bool {
+	vol, elems := splitPath(path)
+	if (vol != "/" && !isDrive(vol)) || len(elems) == 0 {
+		return false
+	}
+	named := false
+	for _, e := range elems {
+		if e == ".." {
+			return false
+		}
+		named = named || e == "temp" || e == "tmp"
+	}
+	if !named {
+		return false
+	}
+
+	within := func(outer, inner string) bool {
+		if outer == "" || inner == "" {
+			return false
+		}
+		ov, oe := splitPath(outer)
+		iv, ie := splitPath(inner)
+		if ov != iv || len(oe) > len(ie) {
+			return false
+		}
+		for i := range oe {
+			if oe[i] != ie[i] {
+				return false
+			}
+		}
+		return true
+	}
+	return !within(path, userProfile) && !within(path, localAppData) &&
+		!within(systemRoot, path)
+}
+
+// splitPath lowercases p and splits it into its volume and its elements. The
+// volume is a drive such as "c:", "/" for a leading separator, "//" for a UNC
+// path and "" for anything relative. Empty and "." elements are dropped.
+func splitPath(p string) (vol string, elems []string) {
+	p = strings.ToLower(strings.ReplaceAll(p, `\`, "/"))
+	switch {
+	case strings.HasPrefix(p, "//"):
+		vol, p = "//", p[2:]
+	case strings.HasPrefix(p, "/"):
+		vol, p = "/", p[1:]
+	case len(p) >= 3 && isDrive(p[:2]) && p[2] == '/':
+		vol, p = p[:2], p[3:]
+	}
+	for _, e := range strings.Split(p, "/") {
+		if e != "" && e != "." {
+			elems = append(elems, e)
+		}
+	}
+	return vol, elems
+}
+
+func isDrive(vol string) bool {
+	return len(vol) == 2 && vol[0] >= 'a' && vol[0] <= 'z' && vol[1] == ':'
+}
+
 // ToolCache is a cache only its own tool can clean safely.
 type ToolCache struct {
 	ID        string

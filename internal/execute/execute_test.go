@@ -86,6 +86,38 @@ func TestTempRemovalKeepsRecentFiles(t *testing.T) {
 	}
 }
 
+func TestTempRemovalRefusesAFolderThatIsNotATempFolder(t *testing.T) {
+	now := time.Now()
+	profile := t.TempDir()
+	write(t, filepath.Join(profile, "old.txt"), 100, now.AddDate(0, 0, -30))
+	e := Executor{UserProfile: profile, SystemRoot: `C:\Windows`, Now: func() time.Time { return now }}
+
+	for _, path := range []string{`C:\`, profile} {
+		_, err := e.Execute(context.Background(), windowsStep(plan.KindWindowsTemp, path))
+		if err == nil || !strings.Contains(err.Error(), "doesn't look like a temp folder") {
+			t.Errorf("%s: err = %v", path, err)
+		}
+	}
+	if _, err := os.Stat(filepath.Join(profile, "old.txt")); err != nil {
+		t.Fatal("a file in the profile folder was deleted")
+	}
+}
+
+// A relative path would resolve against whatever the working directory is.
+func TestWindowsRemovalRefusesARelativePath(t *testing.T) {
+	t.Chdir(t.TempDir())
+	cache := caches.WindowsCachePath("local", caches.WindowsDirs[0])
+	write(t, filepath.Join(cache, "entry"), 10, time.Now())
+	e := Executor{LocalAppData: "local", Now: time.Now}
+
+	if _, err := e.Execute(context.Background(), windowsStep(plan.KindWindowsRemove, cache)); err == nil {
+		t.Error("deleting a relative path was not refused")
+	}
+	if _, err := os.Stat(filepath.Join(cache, "entry")); err != nil {
+		t.Fatal("a file under a relative path was deleted")
+	}
+}
+
 func TestWSLCacheRemovalRunsTheKnownScript(t *testing.T) {
 	f := run.NewFake().On(run.Out(""), "wsl.exe", "-d", "Ubuntu", "-e", "sh", "-c", caches.RemoveScript(".npm/_npx"))
 	s := plan.Step{ID: "cache:Ubuntu:npx", Phase: plan.PhaseWSLCaches,
@@ -299,6 +331,9 @@ func TestDescribeCoversEveryStep(t *testing.T) {
 			t.Errorf("%s has no description", s.ID)
 		}
 		if s.ID == "cache:Ubuntu:npm" && !strings.Contains(strings.Join(lines, " "), "rm -rf -- '.npm/_cacache'") {
+			t.Errorf("%s: %v", s.ID, lines)
+		}
+		if s.ID == "win:temp" && !strings.Contains(strings.Join(lines, " "), "older than 7 days") {
 			t.Errorf("%s: %v", s.ID, lines)
 		}
 	}
