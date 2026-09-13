@@ -2,6 +2,8 @@ package vhd
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -80,6 +82,75 @@ func TestCompactReportsAFailingDiskpart(t *testing.T) {
 	}
 	if !cleaned {
 		t.Fatal("the script file was not removed after a failure")
+	}
+}
+
+func TestDetachScript(t *testing.T) {
+	want := "select vdisk file=\"" + disk + "\"\r\ndetach vdisk noerr\r\nexit\r\n"
+	if got := DetachScript(disk); got != want {
+		t.Fatalf("got %q", got)
+	}
+}
+
+// scripts hands out a new file per call, as TempScript does, and remembers
+// what went in each and whether it was cleaned up.
+type scripts struct {
+	written []string
+	cleaned []bool
+}
+
+func (s *scripts) write(content string) (string, func(), error) {
+	i := len(s.written)
+	s.written = append(s.written, content)
+	s.cleaned = append(s.cleaned, false)
+	return fmt.Sprintf(`C:\Temp\unbloat-%d.txt`, i+1), func() { s.cleaned[i] = true }, nil
+}
+
+// diskpart /s stops at the first error, so a failed compact vdisk leaves the
+// disk attached until it's detached again.
+func TestAFailedDiskpartCompactionDetachesTheDisk(t *testing.T) {
+	for name, tc := range map[string]struct {
+		detach int
+		want   string
+	}{
+		"detached":       {0, "the disk was detached again"},
+		"still attached": {1, "restart Windows"},
+	} {
+		s := &scripts{}
+		f := run.NewFake().
+			On(run.Exit(1, ""), "powershell.exe", ps(HasOptimizeScript)...).
+			On(run.Exit(2, "Virtual Disk Service error"), "diskpart.exe", "/s", `C:\Temp\unbloat-1.txt`).
+			On(run.Exit(tc.detach, ""), "diskpart.exe", "/s", `C:\Temp\unbloat-2.txt`)
+		err := Compactor{R: f, WriteScript: s.write}.Compact(context.Background(), disk)
+
+		if err == nil || !strings.Contains(err.Error(), "diskpart: exit 2: Virtual Disk Service error") || !strings.Contains(err.Error(), tc.want) {
+			t.Errorf("%s: err = %v", name, err)
+		}
+		if len(s.written) != 2 || s.written[1] != DetachScript(disk) {
+			t.Errorf("%s: scripts = %q", name, s.written)
+		}
+		for i, c := range s.cleaned {
+			if !c {
+				t.Errorf("%s: script %d was not removed", name, i+1)
+			}
+		}
+	}
+}
+
+func TestADetachScriptThatCannotBeWrittenSaysToRestart(t *testing.T) {
+	calls := 0
+	f := run.NewFake().
+		On(run.Exit(1, ""), "powershell.exe", ps(HasOptimizeScript)...).
+		On(run.Exit(2, ""), "diskpart.exe", "/s", `C:\Temp\unbloat-1.txt`)
+	c := Compactor{R: f, WriteScript: func(string) (string, func(), error) {
+		if calls++; calls > 1 {
+			return "", nil, errors.New("disk full")
+		}
+		return `C:\Temp\unbloat-1.txt`, func() {}, nil
+	}}
+	err := c.Compact(context.Background(), disk)
+	if err == nil || !strings.Contains(err.Error(), "restart Windows") {
+		t.Fatalf("err = %v", err)
 	}
 }
 

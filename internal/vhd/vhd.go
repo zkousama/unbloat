@@ -4,6 +4,7 @@ package vhd
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"strings"
@@ -34,6 +35,18 @@ func DiskpartScript(path string) string {
 		"attach vdisk readonly",
 		"compact vdisk",
 		"detach vdisk",
+		"exit",
+		"",
+	}, "\r\n")
+}
+
+// DetachScript detaches a disk after a failed compaction, since diskpart /s
+// stops at the first error and would leave it attached. noerr is there
+// because the compaction may have failed before the disk was attached.
+func DetachScript(path string) string {
+	return strings.Join([]string{
+		`select vdisk file="` + path + `"`,
+		"detach vdisk noerr",
 		"exit",
 		"",
 	}, "\r\n")
@@ -97,9 +110,24 @@ func (c Compactor) Compact(ctx context.Context, path string) error {
 	}
 	// diskpart's messages are localized; its exit code is not.
 	if res.Code != 0 {
-		return fmt.Errorf("diskpart: exit %d: %s", res.Code, strings.TrimSpace(string(res.Stdout)))
+		msg := fmt.Sprintf("diskpart: exit %d: %s", res.Code, strings.TrimSpace(string(res.Stdout)))
+		if c.detach(ctx, path) {
+			return errors.New(msg + "; the disk was detached again")
+		}
+		return errors.New(msg + "; it may still be attached, so restart Windows before opening WSL or Docker Desktop")
 	}
 	return nil
+}
+
+// detach runs DetachScript and reports whether diskpart exited 0.
+func (c Compactor) detach(ctx context.Context, path string) bool {
+	script, cleanup, err := c.WriteScript(DetachScript(path))
+	if err != nil {
+		return false
+	}
+	defer cleanup()
+	res, err := c.R.Run(ctx, "diskpart.exe", "/s", script)
+	return err == nil && res.Code == 0
 }
 
 // Commands is what Compact runs, written out for the confirmation screen.
