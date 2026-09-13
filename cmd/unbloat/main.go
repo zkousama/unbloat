@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"os/signal"
 	"runtime"
 	"strings"
 	"time"
@@ -113,6 +114,10 @@ func start() int {
 		Drive:    systemDrive(os.Getenv),
 		LogPath:  logPath,
 	})
+	// Bubble Tea stops listening for interrupts after the first one. Without a
+	// registration of our own, Go would fall back to its default handler for
+	// the second and end the process, even partway through a compaction.
+	signal.Notify(make(chan os.Signal, 1), os.Interrupt)
 	final, err := tea.NewProgram(model, tea.WithAltScreen(), tea.WithFilter(ui.Filter)).Run()
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "unbloat:", err)
