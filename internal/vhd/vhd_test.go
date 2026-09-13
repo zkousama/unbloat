@@ -102,3 +102,18 @@ func TestCommandsShowWhatWillRun(t *testing.T) {
 		t.Errorf("diskpart: %q", got)
 	}
 }
+
+func TestCompactRefusesAPathDiskpartCannotQuote(t *testing.T) {
+	f := run.NewFake()
+	c := Compactor{R: f, WriteScript: func(string) (string, func(), error) {
+		t.Fatal("WriteScript must not be called")
+		return "", nil, nil
+	}}
+	err := c.Compact(context.Background(), `C:\bad"name.vhdx`)
+	if err == nil || !strings.Contains(err.Error(), "cannot quote") {
+		t.Fatalf("err = %v", err)
+	}
+	if len(f.Calls()) != 0 {
+		t.Fatalf("no commands should have run, but got %v", f.Calls())
+	}
+}

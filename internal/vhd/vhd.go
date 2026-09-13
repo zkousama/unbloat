@@ -69,7 +69,12 @@ func (c Compactor) HasOptimizeVHD(ctx context.Context) bool {
 	return err == nil && res.Code == 0
 }
 
+// Compact compacts the disk at path. It refuses paths containing ", \r or \n,
+// because diskpart cannot quote them safely.
 func (c Compactor) Compact(ctx context.Context, path string) error {
+	if strings.ContainsAny(path, "\"\r\n") {
+		return fmt.Errorf("refusing to compact %q: the path holds a character diskpart cannot quote", path)
+	}
 	if c.HasOptimizeVHD(ctx) {
 		res, err := c.R.Run(ctx, "powershell.exe", powershell(OptimizeScript(path))...)
 		if err != nil {
