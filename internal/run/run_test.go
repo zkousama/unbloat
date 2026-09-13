@@ -37,6 +37,9 @@ func TestHelperProcess(t *testing.T) {
 		if err := grandchild.Start(); err != nil {
 			os.Exit(1)
 		}
+		// The test needs the grandchild's pid to clean it up: this process
+		// exits without waiting for it, so nothing else reaps it.
+		fmt.Printf("pid %d\n", grandchild.Process.Pid)
 		// Exit now, without waiting for the grandchild: it keeps the output
 		// pipe this process inherited from its own parent open.
 		os.Exit(0)
@@ -106,6 +109,18 @@ func TestExecTreatsAHeldPipeAfterExit0AsSuccess(t *testing.T) {
 	if elapsed := time.Since(start); elapsed >= 3*time.Second {
 		t.Fatalf("Run took %s: it waited for the grandchild's sleep instead of the wait delay", elapsed)
 	}
+
+	// The helper's grandchild is still sleeping and holding the pipe; it
+	// outlives this process unless the test kills it itself.
+	var pid int
+	if _, err := fmt.Sscanf(string(res.Stdout), "pid %d", &pid); err != nil {
+		t.Fatalf("could not read the grandchild's pid from %q: %v", res.Stdout, err)
+	}
+	t.Cleanup(func() {
+		if p, err := os.FindProcess(pid); err == nil {
+			_ = p.Kill() // already exited is fine
+		}
+	})
 }
 
 func TestExecReturnsAnErrorWhenTheCommandCannotStart(t *testing.T) {
