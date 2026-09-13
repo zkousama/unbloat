@@ -6,9 +6,11 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 // TestHelperProcess is not a test. The other tests re-run the test binary with
@@ -23,6 +25,23 @@ func TestHelperProcess(t *testing.T) {
 	case "pwd":
 		wd, _ := os.Getwd()
 		fmt.Fprint(os.Stdout, wd)
+		os.Exit(0)
+	case "hold":
+		self, err := os.Executable()
+		if err != nil {
+			os.Exit(1)
+		}
+		grandchild := exec.Command(self, "-test.run=TestHelperProcess")
+		grandchild.Env = append(os.Environ(), "UNBLOAT_HELPER=sleep")
+		grandchild.Stdout = os.Stdout
+		if err := grandchild.Start(); err != nil {
+			os.Exit(1)
+		}
+		// Exit now, without waiting for the grandchild: it keeps the output
+		// pipe this process inherited from its own parent open.
+		os.Exit(0)
+	case "sleep":
+		time.Sleep(3 * time.Second)
 		os.Exit(0)
 	}
 }
@@ -64,6 +83,28 @@ func TestExecReportsANonZeroExitAsAResult(t *testing.T) {
 	}
 	if !strings.Contains(log.String(), "exit 3") {
 		t.Fatalf("log does not record the exit code:\n%s", log.String())
+	}
+}
+
+// A command that has already exited 0 isn't failed just because a grandchild,
+// such as a distro wsl.exe starts, still holds the output pipe open.
+func TestExecTreatsAHeldPipeAfterExit0AsSuccess(t *testing.T) {
+	t.Setenv("UNBLOAT_HELPER", "hold")
+	self, err := os.Executable()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	start := time.Now()
+	res, err := (&Exec{WaitDelay: 200 * time.Millisecond}).Run(context.Background(), self, "-test.run=TestHelperProcess")
+	if err != nil {
+		t.Fatalf("err = %v, want nil", err)
+	}
+	if res.Code != 0 {
+		t.Fatalf("code = %d, want 0", res.Code)
+	}
+	if elapsed := time.Since(start); elapsed >= 3*time.Second {
+		t.Fatalf("Run took %s: it waited for the grandchild's sleep instead of the wait delay", elapsed)
 	}
 }
 
