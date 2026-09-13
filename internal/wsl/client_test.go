@@ -141,14 +141,31 @@ func TestUsedRunsDfAsRootWithoutAShell(t *testing.T) {
 
 func TestTrimAllMountsOrOne(t *testing.T) {
 	f := run.NewFake().
-		On(run.Out(""), "wsl.exe", "-d", "Ubuntu", "-u", "root", "-e", "fstrim", "-av").
-		On(run.Out(""), "wsl.exe", "-d", "docker-desktop", "-u", "root", "-e", "fstrim", "-v", "/mnt/docker-desktop-disk")
+		On(run.Out(""), "wsl.exe", "-d", "Ubuntu", "-u", "root", "-e", "sh", "-c", TrimScript("")).
+		On(run.Out(""), "wsl.exe", "-d", "docker-desktop", "-u", "root", "-e", "sh", "-c", TrimScript("/mnt/docker-desktop-disk"))
 	c := Client{R: f}
 	if err := c.Trim(context.Background(), "Ubuntu", ""); err != nil {
 		t.Fatal(err)
 	}
 	if err := c.Trim(context.Background(), "docker-desktop", "/mnt/docker-desktop-disk"); err != nil {
 		t.Fatal(err)
+	}
+}
+
+// wsl.exe's -e resolves a bare program name with a default search path that
+// lacks /usr/sbin and /sbin, where fstrim lives, so the script has to add them
+// itself before running fstrim.
+func TestTrimScriptFindsFstrimOutsideTheDefaultPath(t *testing.T) {
+	for _, script := range []string{TrimScript(""), TrimScript("/mnt/docker-desktop-disk")} {
+		if !strings.Contains(script, "/usr/sbin:/sbin") {
+			t.Errorf("script does not extend PATH with the sbin directories: %q", script)
+		}
+		if !strings.Contains(script, "exec fstrim") {
+			t.Errorf("script does not exec fstrim: %q", script)
+		}
+	}
+	if got := TrimScript("/mnt/it's mine"); !strings.Contains(got, `/mnt/it'\''s mine`) {
+		t.Errorf("a mount with a single quote was not quoted safely: %q", got)
 	}
 }
 

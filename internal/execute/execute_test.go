@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -131,8 +132,8 @@ func TestWSLCacheRemovalRunsTheKnownScript(t *testing.T) {
 
 func TestTrimRunsAsRootInTheDistroThatOwnsTheDisk(t *testing.T) {
 	f := run.NewFake().
-		On(run.Out(""), "wsl.exe", "-d", "Ubuntu", "-u", "root", "-e", "fstrim", "-av").
-		On(run.Out(""), "wsl.exe", "-d", docker.DistroName, "-u", "root", "-e", "fstrim", "-v", docker.DataMount)
+		On(run.Out(""), "wsl.exe", "-d", "Ubuntu", "-u", "root", "-e", "sh", "-c", wsl.TrimScript("")).
+		On(run.Out(""), "wsl.exe", "-d", docker.DistroName, "-u", "root", "-e", "sh", "-c", wsl.TrimScript(docker.DataMount))
 	e := Executor{WSL: wsl.Client{R: f}}
 	p := plan.Plan{Items: []plan.Item{
 		{ID: "compact:Ubuntu", Kind: plan.KindCompact, Disk: "Ubuntu", Distro: "Ubuntu", Selected: true},
@@ -378,6 +379,15 @@ func TestDescribeCoversEveryStep(t *testing.T) {
 		}
 		if s.ID == "win:temp" && !strings.Contains(strings.Join(lines, " "), "older than 7 days") {
 			t.Errorf("%s: %v", s.ID, lines)
+		}
+		if s.ID == "trim:docker" {
+			want := []string{
+				"wsl.exe -d docker-desktop -u root -e sh -c:",
+				"  " + wsl.TrimScript(docker.DataMount),
+			}
+			if !reflect.DeepEqual(lines, want) {
+				t.Errorf("%s: got %v, want %v", s.ID, lines, want)
+			}
 		}
 	}
 }

@@ -98,12 +98,26 @@ func (c Client) Used(ctx context.Context, distro, path string) (int64, error) {
 // them. It runs as root, so it never waits on a sudo password. An empty mount
 // trims every mounted filesystem.
 func (c Client) Trim(ctx context.Context, distro, mount string) error {
-	args := []string{"-d", distro, "-u", "root", "-e", "fstrim", "-av"}
-	if mount != "" {
-		args = []string{"-d", distro, "-u", "root", "-e", "fstrim", "-v", mount}
-	}
-	_, err := c.check(ctx, exe, args...)
+	_, err := c.check(ctx, exe, "-d", distro, "-u", "root", "-e", "sh", "-c", TrimScript(mount))
 	return err
+}
+
+// TrimScript is the script Trim runs inside the distro. wsl.exe's -e looks
+// programs up without /usr/sbin and /sbin, where fstrim lives, so the script
+// adds them to PATH itself before running it. Running it through a
+// non-interactive sh still avoids the user's shell configuration: such a
+// shell reads no startup files.
+func TrimScript(mount string) string {
+	if mount == "" {
+		return `PATH="$PATH:/usr/sbin:/sbin"; export PATH; exec fstrim -av`
+	}
+	return `PATH="$PATH:/usr/sbin:/sbin"; export PATH; exec fstrim -v ` + shellQuote(mount)
+}
+
+// shellQuote quotes s for sh. Duplicated from internal/caches, which this
+// package does not import.
+func shellQuote(s string) string {
+	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
 }
 
 // Shutdown stops every distro and the WSL virtual machine.

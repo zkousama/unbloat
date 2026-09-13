@@ -183,10 +183,7 @@ func (e Executor) Describe(s plan.Step) []string {
 	it := s.Item
 	switch s.Phase {
 	case plan.PhaseTrim:
-		if it.Mount == "" {
-			return []string{inDistro(it.Distro, "-u", "root", "-e", "fstrim", "-av")}
-		}
-		return []string{inDistro(it.Distro, "-u", "root", "-e", "fstrim", "-v", it.Mount)}
+		return []string{inDistro(it.Distro, "-u", "root", "-e", "sh", "-c") + ":", "  " + wsl.TrimScript(it.Mount)}
 	case plan.PhaseStop:
 		return []string{"docker desktop stop   (if Docker Desktop is running)", "wsl.exe --shutdown"}
 	case plan.PhaseUnlock:
