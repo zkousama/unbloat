@@ -84,14 +84,16 @@ const pnpmFind = `P=$(command -v pnpm 2>/dev/null); ` +
 // PnpmMeasureScript prints "<kilobytes>\t<store>" and exits 0 when pnpm and
 // its store are both there; exits 3, still printing the size, when the default
 // store exists but pnpm cannot be run; 4 when pnpm runs but has no store; 5
-// when there is neither.
-const PnpmMeasureScript = pnpmFind +
+// when there is neither. It starts from $HOME: pnpm picks its store by the
+// filesystem it runs from, and a Windows working directory would put it under
+// /mnt.
+const PnpmMeasureScript = `cd "$HOME" || exit 1; ` + pnpmFind +
 	`if [ -x "$P" ]; then S=$("$P" store path 2>/dev/null) || exit 4; [ -d "$S" ] || exit 4; du -sk "$S"; exit 0; fi; ` +
 	`if [ -d "$HOME/.local/share/pnpm/store" ]; then du -sk "$HOME/.local/share/pnpm/store"; exit 3; fi; exit 5`
 
 // PnpmPruneScript removes packages no project references. Only pnpm knows which
 // those are, so there is no direct-deletion version. Exits 3 without pnpm.
-const PnpmPruneScript = pnpmFind + `[ -x "$P" ] || exit 3; "$P" store prune`
+const PnpmPruneScript = `cd "$HOME" || exit 1; ` + pnpmFind + `[ -x "$P" ] || exit 3; "$P" store prune`
 
 // PnpmStore is what PnpmMeasureScript found.
 type PnpmStore struct {

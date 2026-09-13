@@ -121,6 +121,16 @@ func TestPnpmScriptsIgnoreWindowsPnpmOnThePath(t *testing.T) {
 	}
 }
 
+// pnpm picks its store by the filesystem it runs from, and a Windows working
+// directory would put it under /mnt.
+func TestPnpmScriptsStartFromHome(t *testing.T) {
+	for name, s := range map[string]string{"measure": PnpmMeasureScript, "prune": PnpmPruneScript} {
+		if !strings.HasPrefix(s, `cd "$HOME" || exit 1; `) {
+			t.Errorf("%s script does not start from $HOME:\n%s", name, s)
+		}
+	}
+}
+
 func TestPnpmPruneFailsWhenPnpmIsMissing(t *testing.T) {
 	shell := &fakeShell{t: t, answers: map[string]run.Result{PnpmPruneScript: run.Exit(3, "")}}
 	if err := (InDistro{S: shell}).PnpmPrune(context.Background(), "Ubuntu"); err == nil {
