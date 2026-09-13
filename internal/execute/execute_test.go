@@ -266,6 +266,21 @@ func TestUnreadableTasklistCountsAsDockerDesktopRunning(t *testing.T) {
 	}
 }
 
+func TestFailingTasklistCountsAsDockerDesktopRunning(t *testing.T) {
+	f := run.NewFake().On(run.Exit(1, ""), "tasklist.exe", "/FI", "IMAGENAME eq Docker Desktop.exe", "/FO", "CSV", "/NH")
+	e := Executor{WSL: wsl.Client{R: f}, Runner: f}
+
+	_, err := e.Execute(context.Background(), stop)
+	if err == nil {
+		t.Fatal("expected an error when tasklist exited non-zero")
+	}
+	for _, c := range f.Calls() {
+		if c == "wsl.exe --shutdown" {
+			t.Fatal("WSL was shut down when tasklist failed")
+		}
+	}
+}
+
 func unlockStep() plan.Step {
 	return plan.Step{ID: "unlock:docker", Phase: plan.PhaseUnlock, Item: plan.Item{Path: disk}}
 }
@@ -300,16 +315,44 @@ func TestCompactReportsHowMuchTheFileShrank(t *testing.T) {
 		On(run.Exit(1, ""), "powershell.exe", "-NoProfile", "-NonInteractive", "-Command", vhd.HasOptimizeScript).
 		On(run.Out(""), "diskpart.exe", "/s", `C:\Temp\s.txt`)
 	sizes := []int64{27_000_000_000, 19_000_000_000}
+	var statted []string
+	var script string
 	e := Executor{
-		Compactor: vhd.Compactor{R: f, WriteScript: func(string) (string, func(), error) {
+		Compactor: vhd.Compactor{R: f, WriteScript: func(content string) (string, func(), error) {
+			script = content
 			return `C:\Temp\s.txt`, func() {}, nil
 		}},
-		Stat: func(string) (int64, bool) { s := sizes[0]; sizes = sizes[1:]; return s, true },
+		Stat: func(p string) (int64, bool) {
+			statted = append(statted, p)
+			s := sizes[0]
+			sizes = sizes[1:]
+			return s, true
+		},
 	}
 	s := plan.Step{ID: "compact:docker", Phase: plan.PhaseCompact, Critical: true, Item: plan.Item{Path: disk}}
 	freed, err := e.Execute(context.Background(), s)
 	if err != nil || freed != 8_000_000_000 {
 		t.Fatalf("freed %d, %v", freed, err)
+	}
+	if len(statted) != 2 || statted[0] != disk || statted[1] != disk {
+		t.Errorf("sizes read from %v, want %s twice", statted, disk)
+	}
+	if !strings.Contains(script, disk) {
+		t.Errorf("the diskpart script does not name the disk:\n%s", script)
+	}
+}
+
+// lockCheckFails is a machine whose open-file check itself fails.
+type lockCheckFails struct{ *sys.FakeFacts }
+
+func (lockCheckFails) Locked(string) (bool, error) { return false, errors.New("access denied") }
+
+// A disk that couldn't be checked isn't a free disk.
+func TestUnlockFailsWhenTheCheckFails(t *testing.T) {
+	e := Executor{Facts: lockCheckFails{&sys.FakeFacts{}}, Sleep: func(time.Duration) {}, UnlockTries: 3}
+	_, err := e.Execute(context.Background(), unlockStep())
+	if err == nil || !strings.Contains(err.Error(), "access denied") {
+		t.Fatalf("err = %v", err)
 	}
 }
 
