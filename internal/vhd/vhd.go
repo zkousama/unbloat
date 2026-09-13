@@ -112,7 +112,7 @@ func (c Compactor) Compact(ctx context.Context, path string) error {
 	if res.Code != 0 {
 		msg := fmt.Sprintf("diskpart: exit %d: %s", res.Code, strings.TrimSpace(string(res.Stdout)))
 		if c.detach(ctx, path) {
-			return errors.New(msg + "; the disk was detached again")
+			return errors.New(msg + "; unbloat asked diskpart to detach it again, and if WSL or Docker Desktop can't open it, restart Windows")
 		}
 		return errors.New(msg + "; it may still be attached, so restart Windows before opening WSL or Docker Desktop")
 	}

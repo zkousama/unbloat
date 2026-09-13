@@ -113,7 +113,7 @@ func TestAFailedDiskpartCompactionDetachesTheDisk(t *testing.T) {
 		detach int
 		want   string
 	}{
-		"detached":       {0, "the disk was detached again"},
+		"detached":       {0, "asked diskpart to detach it again"},
 		"still attached": {1, "restart Windows"},
 	} {
 		s := &scripts{}
