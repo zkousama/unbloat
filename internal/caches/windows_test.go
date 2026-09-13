@@ -168,6 +168,8 @@ func TestIsTempDir(t *testing.T) {
 		`C:\Data`:                               false,
 		``:                                      false,
 		`C:\Users\dev\AppData\Local\Temp\..\..`: false,
+		`\Windows\Temp`:                         false,
+		`\Users\dev\AppData\Local\Temp`:         false,
 	} {
 		if got := IsTempDir(path, profile, windows, local); got != want {
 			t.Errorf("IsTempDir(%q) = %v, want %v", path, got, want)

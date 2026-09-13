@@ -129,6 +129,12 @@ func IsWindowsCachePath(localAppData, path string) bool {
 // answer is the same on every OS: \ and / are both separators, and case is
 // ignored.
 func IsTempDir(path, userProfile, systemRoot, localAppData string) bool {
+	// A single leading backslash resolves against whatever the current drive
+	// is; only "\\" (UNC) and a drive letter name an actual root. A leading
+	// "/" is left alone, since that is how the Linux test paths spell one.
+	if strings.HasPrefix(path, `\`) && !strings.HasPrefix(path, `\\`) {
+		return false
+	}
 	vol, elems := splitPath(path)
 	if (vol != "/" && !isDrive(vol)) || len(elems) == 0 {
 		return false
