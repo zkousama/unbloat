@@ -33,10 +33,12 @@ func (c Client) check(ctx context.Context, args ...string) (run.Result, error) {
 	return res, nil
 }
 
-// Running reports whether the engine answers.
+// Running reports whether the current context is Docker Desktop's engine and
+// it answers. A DOCKER_HOST or another context can point docker.exe at an
+// engine unbloat must leave alone.
 func (c Client) Running(ctx context.Context) bool {
-	_, err := c.check(ctx, "info", "--format", "{{.ServerVersion}}")
-	return err == nil
+	res, err := c.check(ctx, "info", "--format", "{{.OperatingSystem}}")
+	return err == nil && strings.TrimSpace(string(res.Stdout)) == "Docker Desktop"
 }
 
 func (c Client) SystemDF(ctx context.Context) (map[string]Usage, error) {

@@ -164,7 +164,7 @@ func tasklist(f *run.Fake, out string) *run.Fake {
 
 func TestStopStopsDockerDesktopBeforeWSL(t *testing.T) {
 	f := tasklist(run.NewFake(), desktopUp).
-		On(run.Out("29.6.1"), dockerExe, "info", "--format", "{{.ServerVersion}}").
+		On(run.Out("Docker Desktop\n"), dockerExe, "info", "--format", "{{.OperatingSystem}}").
 		On(run.Out(""), dockerExe, "desktop", "stop").
 		On(run.Out(""), "wsl.exe", "--shutdown")
 	e := Executor{WSL: wsl.Client{R: f}, Docker: &docker.Client{R: f, Exe: dockerExe}, Runner: f}
@@ -182,7 +182,7 @@ func TestStopStopsDockerDesktopBeforeWSL(t *testing.T) {
 // Docker Desktop that is still running.
 func TestAFailedDockerStopLeavesWSLRunning(t *testing.T) {
 	f := tasklist(run.NewFake(), desktopUp).
-		On(run.Out("29.6.1"), dockerExe, "info", "--format", "{{.ServerVersion}}").
+		On(run.Out("Docker Desktop\n"), dockerExe, "info", "--format", "{{.OperatingSystem}}").
 		On(run.Exit(1, "timed out"), dockerExe, "desktop", "stop")
 	e := Executor{WSL: wsl.Client{R: f}, Docker: &docker.Client{R: f, Exe: dockerExe}, Runner: f}
 
@@ -213,7 +213,7 @@ func TestStopWithoutDockerOnlyShutsDownWSL(t *testing.T) {
 // process still shows up in tasklist, so it is still stopped properly.
 func TestAHungEngineStillStopsDockerDesktopFirst(t *testing.T) {
 	f := tasklist(run.NewFake(), desktopUp).
-		On(run.Exit(1, ""), dockerExe, "info", "--format", "{{.ServerVersion}}").
+		On(run.Exit(1, ""), dockerExe, "info", "--format", "{{.OperatingSystem}}").
 		On(run.Out(""), dockerExe, "desktop", "stop").
 		On(run.Out(""), "wsl.exe", "--shutdown")
 	e := Executor{WSL: wsl.Client{R: f}, Docker: &docker.Client{R: f, Exe: dockerExe}, Runner: f}

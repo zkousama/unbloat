@@ -54,7 +54,7 @@ func recordedMachine(t *testing.T) *run.Fake {
 		On(run.Out("1992400\t.npm/_cacache\n1468004\t.npm/_npx\n"), "wsl.exe", "-d", "Ubuntu", "-e", "sh", "-c", caches.MeasureScript(caches.WSLCaches)).
 		On(run.Exit(5, ""), "wsl.exe", "-d", "Ubuntu", "-e", "sh", "-c", caches.PnpmMeasureScript).
 		On(run.Out(df(ubuntuUsedKB, "/")), "wsl.exe", "-d", "Ubuntu", "-u", "root", "-e", "df", "-Pk", "/").
-		On(run.Out("29.6.1\n"), dockerExe, "info", "--format", "{{.ServerVersion}}").
+		On(run.Out("Docker Desktop\n"), dockerExe, "info", "--format", "{{.OperatingSystem}}").
 		On(run.Out(readFile(t, "../docker/testdata/system-df-before.jsonl")), dockerExe, "system", "df", "--format", "{{json .}}").
 		On(run.Out(readFile(t, "../docker/testdata/volumes.jsonl")), dockerExe, "volume", "ls", "--format", "{{json .}}").
 		On(run.Out(df(dockerUsedKB, docker.DataMount)), "wsl.exe", "-d", docker.DistroName, "-u", "root", "-e", "df", "-Pk", docker.DataMount)
@@ -229,7 +229,7 @@ func TestAStoppedDistroIsNeverStarted(t *testing.T) {
 }
 
 func TestNothingFromDockerWhenItIsNotRunning(t *testing.T) {
-	f := recordedMachine(t).On(run.Exit(1, ""), dockerExe, "info", "--format", "{{.ServerVersion}}")
+	f := recordedMachine(t).On(run.Exit(1, ""), dockerExe, "info", "--format", "{{.OperatingSystem}}")
 	p := Scan(context.Background(), sources(t, f, &sys.FakeFacts{IsElevated: true}), nil)
 
 	for _, it := range p.Items {
@@ -262,6 +262,25 @@ func TestATempFolderThatIsNotOneIsRefused(t *testing.T) {
 	}
 	if _, ok := find(p, "win:temp"); ok {
 		t.Error("offered a folder that isn't a temp folder")
+	}
+}
+
+func TestAnotherDockerEngineIsNeverCleaned(t *testing.T) {
+	f := recordedMachine(t).On(run.Out("Ubuntu 24.04.1 LTS\n"), dockerExe, "info", "--format", "{{.OperatingSystem}}")
+	p := Scan(context.Background(), sources(t, f, &sys.FakeFacts{IsElevated: true}), nil)
+
+	for _, id := range []string{"docker:buildcache", "docker:images", "compact:docker"} {
+		if _, ok := find(p, id); ok {
+			t.Errorf("offered %s from an engine that isn't Docker Desktop's", id)
+		}
+	}
+	if _, ok := find(p, "docker:stopped"); !ok {
+		t.Error("no note saying Docker Desktop is not running")
+	}
+	for _, call := range f.Calls() {
+		if strings.Contains(call, "system df") || strings.Contains(call, "docker-desktop-disk") {
+			t.Errorf("ran %q against another engine", call)
+		}
 	}
 }
 

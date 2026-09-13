@@ -79,13 +79,22 @@ func TestParseVolumesTellsNamedFromAnonymous(t *testing.T) {
 }
 
 func TestRunningIsTheEngineAnswering(t *testing.T) {
-	up := run.NewFake().On(run.Out("29.6.1\n"), exe, "info", "--format", "{{.ServerVersion}}")
+	up := run.NewFake().On(run.Out("Docker Desktop\n"), exe, "info", "--format", "{{.OperatingSystem}}")
 	if !(Client{R: up, Exe: exe}).Running(context.Background()) {
 		t.Error("engine answered, want running")
 	}
-	down := run.NewFake().On(run.Exit(1, ""), exe, "info", "--format", "{{.ServerVersion}}")
+	down := run.NewFake().On(run.Exit(1, ""), exe, "info", "--format", "{{.OperatingSystem}}")
 	if (Client{R: down, Exe: exe}).Running(context.Background()) {
 		t.Error("engine did not answer, want not running")
+	}
+}
+
+// A DOCKER_HOST or another context can point docker.exe at an engine that
+// isn't Docker Desktop's. Nothing of that engine's is ever cleaned.
+func TestAnotherEngineIsNotDockerDesktopRunning(t *testing.T) {
+	other := run.NewFake().On(run.Out("Ubuntu 24.04.1 LTS\n"), exe, "info", "--format", "{{.OperatingSystem}}")
+	if (Client{R: other, Exe: exe}).Running(context.Background()) {
+		t.Error("an engine on Ubuntu answered, want not running")
 	}
 }
 
