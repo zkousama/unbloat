@@ -63,7 +63,10 @@ func start() int {
 	}
 	defer logFile.Close()
 
-	runner := &run.Exec{Log: logFile, Dir: os.Getenv("SystemRoot")}
+	// pnpm writes a temp file into its working directory, and a standard user
+	// can't write to SystemRoot. LOCALAPPDATA is writable and survives WSL
+	// shutting down.
+	runner := &run.Exec{Log: logFile, Dir: local}
 	facts := sys.Machine{}
 	wslClient := wsl.Client{R: runner}
 	exists := func(p string) bool { _, ok := stat(p); return ok }
