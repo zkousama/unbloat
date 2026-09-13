@@ -17,7 +17,8 @@ var ansi = regexp.MustCompile("\x1b\\[[0-9;]*m")
 func plain(s string) string { return ansi.ReplaceAllString(s, "") }
 
 // 2 totals, never one: space freed inside a disk that is not being compacted
-// does not reach C:.
+// does not reach C:. Ticking a compaction never moves its share onto C:
+// either, since compacting returns an amount nobody can know in advance.
 func TestChecklistShowsTwoTotals(t *testing.T) {
 	m := checklist(t, &sys.FakeFacts{IsElevated: true, Free: 5 << 30, Total: 476 << 30}, &recordingExecutor{})
 	v := plain(m.View())
@@ -26,11 +27,17 @@ func TestChecklistShowsTwoTotals(t *testing.T) {
 			t.Errorf("checklist does not show %q:\n%s", want, v)
 		}
 	}
+	if strings.Contains(v, "plus what compacting returns") {
+		t.Errorf("the compacting line shows before anything is ticked:\n%s", v)
+	}
 
 	m, _ = press(t, m, down, down, space) // compact Ubuntu, which Docker's cache is not inside
 	v = plain(m.View())
-	if !strings.Contains(v, "15.0 GB") {
-		t.Errorf("ticking Ubuntu's compaction should put 15.0 GB on C:\n%s", v)
+	if !strings.Contains(v, "12.0 GB") || !strings.Contains(v, "1.0 GB") {
+		t.Errorf("ticking Ubuntu's compaction should leave the totals unchanged:\n%s", v)
+	}
+	if !strings.Contains(v, "plus what compacting returns, often less than a disk's file size minus its use") {
+		t.Errorf("the compacting line is missing once Ubuntu is ticked:\n%s", v)
 	}
 }
 
@@ -41,15 +48,37 @@ func TestChecklistRows(t *testing.T) {
 		"C: 5.0 GB free of 476.0 GB",
 		"Volumes are kept", "shop_postgres-data",
 		"[x] Build cache",
-		"[ ] Compact Ubuntu", "up to 14.0 GB",
+		"[ ] Compact Ubuntu", "37.0 GB file",
 		"needs administrator rights",
 	} {
 		if !strings.Contains(v, want) {
 			t.Errorf("checklist does not show %q:\n%s", want, v)
 		}
 	}
+	if strings.Contains(v, "up to 14.0 GB") {
+		t.Errorf("the compaction row still shows an amount it may not return:\n%s", v)
+	}
 	if strings.Contains(v, "[ ] Volumes") || strings.Contains(v, "[x] Volumes") {
 		t.Error("the volumes note is drawn as something to tick")
+	}
+}
+
+// pnpm's size is the whole store: a prune only removes packages nothing
+// references, so the row must not read as an amount the prune returns.
+func TestChecklistLabelsPnpmRowsAsStores(t *testing.T) {
+	gib := int64(1) << 30
+	size := int64(3.7 * float64(gib))
+	m := Model{screen: screenChecklist, plan: plan.Plan{Items: []plan.Item{
+		{ID: "cache:Ubuntu:pnpm", Section: "WSL", Kind: plan.KindWSLPnpmPrune, Title: "pnpm store", Size: size, Selected: true},
+		{ID: "win:pnpm", Section: "Windows", Kind: plan.KindWindowsTool, Tool: "pnpm", Title: "pnpm", Size: size, Selected: true},
+		{ID: "win:npm", Section: "Windows", Kind: plan.KindWindowsTool, Tool: "npm", Title: "npm", Size: size, Selected: true},
+	}}}
+	v := plain(m.View())
+	if strings.Count(v, "3.7 GB store") != 2 {
+		t.Errorf("want the WSL and Windows pnpm rows labelled as a store:\n%s", v)
+	}
+	if !strings.Contains(v, "3.7 GB\n") {
+		t.Errorf("npm's own row should show a plain size, not a store label:\n%s", v)
 	}
 }
 
@@ -89,6 +118,26 @@ func TestSummarySaysWSLAndDockerAreStopped(t *testing.T) {
 	}})
 	if s := next.(Model).Summary(); !strings.Contains(s, "stopped") || !strings.Contains(s, "Docker Desktop") {
 		t.Fatalf("summary:\n%s", s)
+	}
+}
+
+// The estimate on the checklist is never a promise, so the summary reports
+// what each compaction actually returned.
+func TestSummaryReportsWhatEachCompactionReturned(t *testing.T) {
+	m := checklist(t, &sys.FakeFacts{IsElevated: true}, &recordingExecutor{})
+	m.screen = screenRun
+	next, _ := m.Update(runDone{outcomes: []plan.Outcome{
+		{Step: plan.Step{ID: "compact:Ubuntu", Title: "Compact Ubuntu", Phase: plan.PhaseCompact}, Status: plan.Done, Freed: 4939212390},
+		{Step: plan.Step{ID: "compact:docker", Title: "Compact Docker", Phase: plan.PhaseCompact}, Status: plan.Done, Freed: 0},
+	}})
+	s := next.(Model).Summary()
+	if !strings.Contains(s, "Compacted:\n") {
+		t.Fatalf("summary does not have a Compacted section:\n%s", s)
+	}
+	for _, want := range []string{"Compact Ubuntu: returned 4.6 GB", "Compact Docker: returned 0 B"} {
+		if !strings.Contains(s, want) {
+			t.Errorf("summary does not show %q:\n%s", want, s)
+		}
 	}
 }
 

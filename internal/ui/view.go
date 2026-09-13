@@ -78,8 +78,12 @@ func (m Model) viewScan() string {
 
 func (m Model) totals() string {
 	t := m.plan.Totals()
-	return fmt.Sprintf("freed inside WSL and Docker  %9s   reaches C: only after compacting\n", plan.Human(t.InsideDisks)) +
+	s := fmt.Sprintf("freed inside WSL and Docker  %9s   reaches C: only after compacting\n", plan.Human(t.InsideDisks)) +
 		fmt.Sprintf("freed on C: by this run      %9s", plan.Human(t.OnC))
+	if m.plan.Compacting() {
+		s += "\n" + dim.Render("  plus what compacting returns, often less than a disk's file size minus its use")
+	}
+	return s
 }
 
 func (m Model) viewChecklist() string {
@@ -117,13 +121,13 @@ func (m Model) viewChecklist() string {
 		}
 		title, size := it.Title, plan.Human(it.Size)
 		detail := it.Cost
-		if it.Kind == plan.KindCompact {
+		switch {
+		case it.Kind == plan.KindCompact:
 			title = "Compact " + it.Title
-			size = "up to " + plan.Human(it.Frees)
-			if it.Frees == 0 {
-				size = "unknown"
-			}
+			size = plan.Human(it.Size) + " file"
 			detail = it.Detail + "; " + it.Cost
+		case it.Kind == plan.KindWSLPnpmPrune, it.Kind == plan.KindWindowsTool && it.Tool == "pnpm":
+			size = plan.Human(it.Size) + " store"
 		}
 		if it.Disabled != "" {
 			detail = it.Disabled
@@ -271,6 +275,18 @@ func (m Model) Summary() string {
 		}
 	}
 	fmt.Fprintf(&b, "Steps: %d done, %d failed, %d skipped.\n", done, len(failed), len(skipped))
+	var compacted []plan.Outcome
+	for _, o := range m.outcomes {
+		if o.Step.Phase == plan.PhaseCompact && o.Status == plan.Done {
+			compacted = append(compacted, o)
+		}
+	}
+	if len(compacted) > 0 {
+		b.WriteString("\nCompacted:\n")
+		for _, o := range compacted {
+			fmt.Fprintf(&b, "  %s: returned %s\n", o.Step.Title, plan.Human(o.Freed))
+		}
+	}
 	if len(failed) > 0 {
 		b.WriteString("\nFailed:\n")
 		for _, o := range failed {
