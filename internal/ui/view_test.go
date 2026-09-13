@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"errors"
 	"regexp"
 	"strings"
 	"testing"
@@ -88,6 +89,61 @@ func TestSummarySaysWSLAndDockerAreStopped(t *testing.T) {
 	}})
 	if s := next.(Model).Summary(); !strings.Contains(s, "stopped") || !strings.Contains(s, "Docker Desktop") {
 		t.Fatalf("summary:\n%s", s)
+	}
+}
+
+func TestSummaryLeavesDockerOutWhenItWasNotRunning(t *testing.T) {
+	m := checklist(t, &sys.FakeFacts{IsElevated: true}, &recordingExecutor{})
+	m.plan.DockerRunning = false
+	m.screen = screenRun
+	next, _ := m.Update(runDone{outcomes: []plan.Outcome{
+		{Step: plan.Step{ID: "stop", Phase: plan.PhaseStop}, Status: plan.Done},
+	}})
+	s := next.(Model).Summary()
+	if !strings.Contains(s, "WSL is stopped. Open a WSL window to start it again.") || strings.Contains(s, "Docker Desktop") {
+		t.Fatalf("summary:\n%s", s)
+	}
+}
+
+func TestSummaryHeaderShowsTheFreeSpaceAfterTheRun(t *testing.T) {
+	facts := &sys.FakeFacts{IsElevated: true, Free: 5 << 30, Total: 476 << 30}
+	m := checklist(t, facts, &recordingExecutor{})
+	facts.Free = 20 << 30
+	m.screen = screenRun
+	next, _ := m.Update(runDone{})
+	v := plain(next.(Model).View())
+	if !strings.Contains(v, "C: 20.0 GB free of 476.0 GB") || !strings.Contains(v, "C: had 5.0 GB free and now has 20.0 GB free.") {
+		t.Fatalf("summary screen:\n%s", v)
+	}
+}
+
+// failingSpace answers the first Space call and fails every one after it.
+type failingSpace struct {
+	*sys.FakeFacts
+	calls int
+}
+
+func (f *failingSpace) Space(path string) (int64, int64, error) {
+	if f.calls++; f.calls > 1 {
+		return 0, 0, errors.New("the device is not ready")
+	}
+	return f.FakeFacts.Space(path)
+}
+
+// A free space that could not be read is not 0 B free.
+func TestSummaryLeavesOutBeforeAndAfterWhenTheSecondReadingFails(t *testing.T) {
+	d := deps(nil, &recordingExecutor{})
+	d.Facts = &failingSpace{FakeFacts: &sys.FakeFacts{IsElevated: true, Free: 5 << 30, Total: 476 << 30}}
+	m := New(d)
+	m = drain(t, m, m.Init())
+	m.screen = screenRun
+	next, _ := m.Update(runDone{})
+	m = next.(Model)
+	if s := m.Summary(); strings.Contains(s, "free") {
+		t.Fatalf("summary:\n%s", s)
+	}
+	if v := plain(m.View()); strings.Contains(v, "0 B") {
+		t.Fatalf("summary screen:\n%s", v)
 	}
 }
 

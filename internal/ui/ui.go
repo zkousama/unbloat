@@ -63,6 +63,7 @@ type Model struct {
 	message string
 
 	freeBefore, freeAfter, total int64
+	afterUnknown                 bool // the free space after the run could not be read
 
 	targets      []target
 	plan         plan.Plan
@@ -169,7 +170,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, listen(m.events)
 	case runDone:
 		m.outcomes, m.current, m.screen = msg.outcomes, nil, screenSummary
-		m.freeAfter, _, _ = m.deps.Facts.Space(m.deps.Drive)
+		free, _, err := m.deps.Facts.Space(m.deps.Drive)
+		m.freeAfter, m.afterUnknown = free, err != nil
 	case tea.KeyMsg:
 		return m.key(msg.String())
 	}

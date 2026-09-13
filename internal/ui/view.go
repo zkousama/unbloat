@@ -44,11 +44,17 @@ func (m Model) View() string {
 
 func (m Model) drive() string { return strings.TrimRight(m.deps.Drive, `\`) }
 
+// header shows the free space now: before the run, and after it on the
+// summary screen.
 func (m Model) header() string {
-	if m.total <= 0 {
+	free := m.freeBefore
+	if m.screen == screenSummary {
+		free = m.freeAfter
+	}
+	if m.total <= 0 || (m.screen == screenSummary && m.afterUnknown) {
 		return bold.Render("unbloat")
 	}
-	return bold.Render("unbloat") + fmt.Sprintf("   %s %s free of %s", m.drive(), plan.Human(m.freeBefore), plan.Human(m.total))
+	return bold.Render("unbloat") + fmt.Sprintf("   %s %s free of %s", m.drive(), plan.Human(free), plan.Human(m.total))
 }
 
 func (m Model) viewElevate() string {
@@ -247,7 +253,7 @@ func (m Model) viewRun() string {
 // closed.
 func (m Model) Summary() string {
 	var b strings.Builder
-	if m.total > 0 {
+	if m.total > 0 && !m.afterUnknown {
 		fmt.Fprintf(&b, "%s had %s free and now has %s free.\n", m.drive(), plan.Human(m.freeBefore), plan.Human(m.freeAfter))
 	}
 
@@ -278,7 +284,10 @@ func (m Model) Summary() string {
 		}
 	}
 	if stopped {
-		b.WriteString("\nWSL and Docker Desktop are stopped. Open a WSL window to start WSL again, and start Docker Desktop from the Start menu.\n")
+		b.WriteString("\nWSL is stopped. Open a WSL window to start it again.\n")
+		if m.plan.DockerRunning {
+			b.WriteString("Docker Desktop is stopped too. Start it from the Start menu.\n")
+		}
 	}
 	fmt.Fprintf(&b, "\nEvery command and its output is in %s\n", m.deps.LogPath)
 	return b.String()
