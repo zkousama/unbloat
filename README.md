@@ -51,7 +51,7 @@ For each disk you tick:
 3. The disk file is checked for anything still holding it open.
 4. `Optimize-VHD -Mode Full` where Windows has it, and `diskpart` with the disk attached read-only on Home editions.
 
-A disk whose trim failed isn't compacted. Ctrl+C stops the run before its next step and lets a compaction that's already running finish.
+A disk whose trim failed isn't compacted. Ctrl+C stops the run before its next step. A step that's already running, a compaction included, finishes first.
 
 Disks are never switched to sparse mode. Current WSL releases refuse `--set-sparse` because of a data corruption risk.
 
