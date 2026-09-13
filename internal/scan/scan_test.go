@@ -212,12 +212,20 @@ func TestDefaults(t *testing.T) {
 	}
 }
 
-// The estimate is the disk file minus what is in use inside it.
-func TestCompactionEstimate(t *testing.T) {
+// A disk shows its file size and how much of it is in use. It never promises
+// an amount compaction may not return: only Windows knows how many of the
+// unused blocks inside the file are whole.
+func TestADiskShowsItsFileAndUseWithoutPromisingAnAmount(t *testing.T) {
 	p := Scan(context.Background(), sources(t, recordedMachine(t), &sys.FakeFacts{IsElevated: true}), nil)
 	ubuntu, _ := find(p, "compact:Ubuntu")
-	if want := int64(ubuntuDiskSize - ubuntuUsedKB*1024); ubuntu.Frees != want {
-		t.Errorf("Ubuntu frees %d, want %d", ubuntu.Frees, want)
+	if ubuntu.Frees != 0 {
+		t.Errorf("Ubuntu frees %d, want 0", ubuntu.Frees)
+	}
+	if ubuntu.Size != ubuntuDiskSize {
+		t.Errorf("Ubuntu size %d, want %d", ubuntu.Size, ubuntuDiskSize)
+	}
+	if want := plan.Human(ubuntuUsedKB * 1024); !strings.Contains(ubuntu.Detail, want) {
+		t.Errorf("Ubuntu detail %q does not contain %q", ubuntu.Detail, want)
 	}
 	dock, _ := find(p, "compact:docker")
 	if dock.Path != dockerDisk || dock.Distro != docker.DistroName || dock.Mount != docker.DataMount {

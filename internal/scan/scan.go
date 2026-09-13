@@ -230,19 +230,18 @@ func (s *scanner) distro(ctx context.Context, d wsl.Distro) {
 	s.report(d.Name, nil)
 }
 
-// disk builds a compaction item. used is -1 when it could not be measured,
-// and then the estimate is 0 rather than a guess.
+// disk builds a compaction item. Windows only ever returns whole unused
+// blocks of the file, so the gap between its size and its use is not a
+// promise: Frees is always 0, and only the run itself learns what came back.
+// used is -1 when it could not be measured.
 func (s *scanner) disk(id, title, disk, path string, size, used int64) plan.Item {
 	it := plan.Item{
 		ID: id, Section: sectionDisks, Kind: plan.KindCompact, Title: title,
 		Size: size, Disk: disk, Cost: compactCost, Path: path,
-		Detail: plan.Human(size) + " file, in use unknown",
+		Detail: "in use unknown",
 	}
 	if used >= 0 {
-		it.Detail = fmt.Sprintf("%s file, %s in use", plan.Human(size), plan.Human(used))
-		if size > used {
-			it.Frees = size - used
-		}
+		it.Detail = plan.Human(used) + " in use"
 	}
 	if !s.src.Facts.Elevated() {
 		it.Disabled = "needs administrator rights"
