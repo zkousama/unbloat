@@ -106,21 +106,23 @@ func (p Plan) Totals() Totals {
 	return t
 }
 
-// Compacting reports whether any disk is selected for compaction.
+// Compacting reports whether any disk is selected for compaction. A disabled
+// item never counts.
 func (p Plan) Compacting() bool {
 	for _, it := range p.Items {
-		if it.Kind == KindCompact && it.Selected {
+		if it.Kind == KindCompact && it.Selected && it.Disabled == "" {
 			return true
 		}
 	}
 	return false
 }
 
-// Selected lists the selected items in order.
+// Selected lists the selected items in order, leaving out notes and disabled
+// items, which never run.
 func (p Plan) Selected() []Item {
 	var out []Item
 	for _, it := range p.Items {
-		if it.Selected && it.Kind != KindNote {
+		if it.Selected && it.Kind != KindNote && it.Disabled == "" {
 			out = append(out, it)
 		}
 	}

@@ -85,6 +85,24 @@ func TestSelectedAndCompacting(t *testing.T) {
 	}
 }
 
+// Toggle refuses a disabled item, but an item can arrive already ticked. It
+// still never runs.
+func TestADisabledItemNeverRunsEvenWhenSelected(t *testing.T) {
+	p := Plan{Items: []Item{
+		{ID: "win:temp", Kind: KindWindowsTemp, Selected: true, Disabled: "x"},
+		{ID: "compact:Ubuntu", Kind: KindCompact, Disk: "Ubuntu", Selected: true, Disabled: "x"},
+	}}
+	if got := p.Selected(); len(got) != 0 {
+		t.Errorf("selected = %v", got)
+	}
+	if steps := p.Steps(); len(steps) != 0 {
+		t.Errorf("steps = %v", ids(steps))
+	}
+	if p.Compacting() {
+		t.Error("a disabled compaction counts as compacting")
+	}
+}
+
 // Powers of 1024 labelled GB, as Windows Explorer shows them.
 func TestHuman(t *testing.T) {
 	for n, want := range map[int64]string{
