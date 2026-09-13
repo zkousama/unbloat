@@ -27,19 +27,20 @@ func TestTotalsKeepSpaceInsideDisksApartFromSpaceOnC(t *testing.T) {
 	}
 }
 
-func TestCompactingADiskMovesItsShareOntoC(t *testing.T) {
+// The mistake this test exists to prevent: a compaction's Frees is a guess,
+// and guesses never move space onto C:.
+func TestCompactingADiskNeverAddsToTheTotalOnC(t *testing.T) {
 	p := sample()
+	before := p.Totals()
 	if err := p.Toggle("compact:Ubuntu"); err != nil {
 		t.Fatal(err)
 	}
 	got := p.Totals()
-	// Windows temp 1, Ubuntu's own slack 14, and the 2 freed inside Ubuntu.
-	if got.OnC != 17*gb {
-		t.Fatalf("on C: %s", Human(got.OnC))
+	if got.OnC != before.OnC {
+		t.Fatalf("on C: %s, want unchanged at %s", Human(got.OnC), Human(before.OnC))
 	}
-	// Docker is still not being compacted, so its 12 stays inside.
-	if got.InsideDisks != 12*gb {
-		t.Fatalf("inside disks: %s", Human(got.InsideDisks))
+	if got.InsideDisks != before.InsideDisks {
+		t.Fatalf("inside disks: %s, want unchanged at %s", Human(got.InsideDisks), Human(before.InsideDisks))
 	}
 }
 

@@ -82,24 +82,20 @@ type Totals struct {
 	InsideDisks int64 // freed inside virtual disks that are not being compacted
 }
 
-// Totals never adds space inside a virtual disk to space on C: unless that
-// disk is being compacted, because until then the drive does not change.
+// Totals never adds space inside a virtual disk to space on C:. Space freed
+// inside a disk only reaches C: once that disk is compacted, and compaction
+// returns an amount nobody can know in advance, so a compaction item never
+// contributes to either total.
 func (p Plan) Totals() Totals {
-	compacting := map[string]bool{}
-	for _, it := range p.Items {
-		if it.Kind == KindCompact && it.Selected {
-			compacting[it.Disk] = true
-		}
-	}
 	var t Totals
 	for _, it := range p.Items {
-		if !it.Selected || it.Kind == KindNote {
+		if !it.Selected || it.Kind == KindNote || it.Kind == KindCompact {
 			continue
 		}
-		switch {
-		case it.Kind == KindCompact, it.Lands == OnC, compacting[it.Disk]:
+		switch it.Lands {
+		case OnC:
 			t.OnC += it.Frees
-		default:
+		case InsideDisk:
 			t.InsideDisks += it.Frees
 		}
 	}
