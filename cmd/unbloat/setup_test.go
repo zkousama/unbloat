@@ -3,6 +3,7 @@ package main
 import (
 	"os"
 	"path/filepath"
+	"runtime/debug"
 	"strings"
 	"testing"
 	"time"
@@ -39,6 +40,30 @@ func TestSystemDrive(t *testing.T) {
 	}
 	if got := systemDrive(func(string) string { return "" }); got != `C:\` {
 		t.Errorf("got %q", got)
+	}
+}
+
+// go install builds without the release's -ldflags, but records the module
+// version it installed.
+func TestVersionFallsBackToTheModuleVersion(t *testing.T) {
+	info := func(v string) func() (*debug.BuildInfo, bool) {
+		return func() (*debug.BuildInfo, bool) { return &debug.BuildInfo{Main: debug.Module{Version: v}}, true }
+	}
+	none := func() (*debug.BuildInfo, bool) { return nil, false }
+	for _, tc := range []struct {
+		version string
+		read    func() (*debug.BuildInfo, bool)
+		want    string
+	}{
+		{"v0.1.0", info("v0.2.0"), "v0.1.0"},
+		{"dev", info("v0.2.0"), "v0.2.0"},
+		{"dev", info("(devel)"), "dev"},
+		{"dev", info(""), "dev"},
+		{"dev", none, "dev"},
+	} {
+		if got := resolveVersion(tc.version, tc.read); got != tc.want {
+			t.Errorf("resolveVersion(%q) = %q, want %q", tc.version, got, tc.want)
+		}
 	}
 }
 

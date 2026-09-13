@@ -7,6 +7,7 @@ import (
 	"os/exec"
 	"os/signal"
 	"runtime"
+	"runtime/debug"
 	"strings"
 	"time"
 
@@ -28,7 +29,7 @@ var version = "dev"
 
 func main() {
 	if len(os.Args) > 1 && (os.Args[1] == "--version" || os.Args[1] == "-v") {
-		fmt.Println(version)
+		fmt.Println(resolveVersion(version, debug.ReadBuildInfo))
 		return
 	}
 	if runtime.GOOS != "windows" {

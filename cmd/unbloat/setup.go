@@ -4,6 +4,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"runtime/debug"
 	"time"
 )
 
@@ -32,6 +33,18 @@ func systemDrive(getenv func(string) string) string {
 		return d + `\`
 	}
 	return `C:\`
+}
+
+// resolveVersion is the version -ldflags set, or else the module version go
+// install records. read is debug.ReadBuildInfo.
+func resolveVersion(version string, read func() (*debug.BuildInfo, bool)) string {
+	if version != "dev" {
+		return version
+	}
+	if info, ok := read(); ok && info.Main.Version != "" && info.Main.Version != "(devel)" {
+		return info.Main.Version
+	}
+	return version
 }
 
 // stat reports a regular file's size. A virtual disk in use can still be
