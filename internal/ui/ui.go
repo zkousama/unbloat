@@ -69,6 +69,7 @@ type Model struct {
 	cursor       int // index into rows()
 	showCommands bool
 	steps        []plan.Step
+	scroll       int // first line of confirmLines() shown, when it does not fit
 	gate         []string
 
 	current     *plan.Step
@@ -92,6 +93,16 @@ func (m Model) Init() tea.Cmd {
 		return m.scan()
 	}
 	return nil
+}
+
+// Filter turns an interrupt signal into the ctrl+c key, so a run is stopped
+// the same way however the interrupt arrives: before its next step, never
+// partway through a compaction. Pass it to tea.WithFilter.
+func Filter(_ tea.Model, msg tea.Msg) tea.Msg {
+	if _, ok := msg.(tea.InterruptMsg); ok {
+		return tea.KeyMsg{Type: tea.KeyCtrlC}
+	}
+	return msg
 }
 
 // Relaunched reports whether an elevated copy was started and this one quit.
@@ -223,12 +234,17 @@ func (m Model) key(key string) (tea.Model, tea.Cmd) {
 			m.steps = m.plan.Steps()
 			m.showCommands = key == "c"
 			m.screen = screenConfirm
+			m.scroll = 0
 		case "q":
 			return m.quit()
 		}
 
 	case screenConfirm:
 		switch key {
+		case "up", "k":
+			m.scroll = max(m.scroll-1, 0)
+		case "down", "j":
+			m.scroll = min(m.scroll+1, max(len(m.confirmLines())-1, 0))
 		case "c":
 			m.showCommands = !m.showCommands
 		case "esc":

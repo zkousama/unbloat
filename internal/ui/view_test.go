@@ -5,6 +5,8 @@ import (
 	"strings"
 	"testing"
 
+	tea "github.com/charmbracelet/bubbletea"
+
 	"github.com/zkousama/unbloat/internal/plan"
 	"github.com/zkousama/unbloat/internal/sys"
 )
@@ -109,5 +111,32 @@ func TestWindowKeepsTheCursorOnScreen(t *testing.T) {
 	}
 	if got := window(lines[:5], 3, 20); len(got) != 5 {
 		t.Fatalf("a short list was cut to %d lines", len(got))
+	}
+}
+
+// The confirmation screen has no cursor of its own, so Bubble Tea's own
+// windowing (keeping only the bottom `height` lines) would scroll the first
+// steps off the top as soon as commands are shown. It must scroll instead.
+func TestConfirmationScrolls(t *testing.T) {
+	m := checklist(t, &sys.FakeFacts{IsElevated: true}, &recordingExecutor{})
+	next, _ := m.Update(tea.WindowSizeMsg{Height: 12, Width: 80})
+	m = next.(Model)
+	m, _ = press(t, m, down, down, space) // also compact Ubuntu, for enough steps to overflow
+	m, _ = press(t, m, letter('c'))
+
+	v := plain(m.View())
+	if !strings.Contains(v, "%TEMP%") {
+		t.Fatalf("the first step is not visible at the top:\n%s", v)
+	}
+
+	for i := 0; i < 20; i++ {
+		m, _ = press(t, m, down)
+	}
+	v = plain(m.View())
+	if strings.Contains(v, "%TEMP%") {
+		t.Errorf("the first step is still visible after scrolling down:\n%s", v)
+	}
+	if !strings.Contains(v, "Compact Ubuntu") {
+		t.Errorf("a later step is not visible after scrolling down:\n%s", v)
 	}
 }

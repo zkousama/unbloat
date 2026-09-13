@@ -139,26 +139,41 @@ func (m Model) viewChecklist() string {
 		dim.Render("space  tick   enter  review   c  review with commands   q  quit")
 }
 
-func (m Model) viewConfirm() string {
-	var b strings.Builder
-	b.WriteString("This runs, in this order:\n\n")
+// confirmLines is the numbered steps and, when requested, the commands each
+// one runs. It is the part of the confirmation screen that can outgrow the
+// terminal and so is the part that scrolls.
+func (m Model) confirmLines() []string {
+	var lines []string
 	for i, s := range m.steps {
 		title := s.Title
 		if s.Phase < plan.PhaseTrim && s.Item.Section != "" {
 			title += dim.Render("  " + s.Item.Section)
 		}
-		fmt.Fprintf(&b, "%2d. %s\n", i+1, title)
+		lines = append(lines, fmt.Sprintf("%2d. %s", i+1, title))
 		if m.showCommands {
 			for _, c := range m.deps.Describe(s) {
-				b.WriteString("      " + dim.Render(c) + "\n")
+				lines = append(lines, "      "+dim.Render(c))
 			}
 		}
 	}
-	if m.plan.Compacting() {
-		b.WriteString("\n" + warn.Render("Compacting stops Docker Desktop and shuts down WSL, which closes every WSL window.") + "\n")
+	return lines
+}
+
+func (m Model) viewConfirm() string {
+	lines := m.confirmLines()
+	if h := max(m.height-10, 5); m.height > 0 && len(lines) > h {
+		start := min(m.scroll, len(lines)-h)
+		lines = lines[start : start+h]
 	}
-	b.WriteString("\n" + m.totals() + "\n\n")
-	b.WriteString(dim.Render("enter  continue   c  show commands   esc  back"))
+
+	var b strings.Builder
+	b.WriteString("This runs, in this order:\n\n")
+	b.WriteString(strings.Join(lines, "\n"))
+	if m.plan.Compacting() {
+		b.WriteString("\n\n" + warn.Render("Compacting stops Docker Desktop and shuts down WSL, which closes every WSL window."))
+	}
+	b.WriteString("\n\n" + m.totals() + "\n\n")
+	b.WriteString(dim.Render("enter  continue   c  show commands   esc  back   up/down  scroll"))
 	return b.String()
 }
 
@@ -170,7 +185,7 @@ func (m Model) viewGate() string {
 		b.WriteString("No WSL distro is running.\n")
 	}
 	if m.plan.DockerRunning {
-		b.WriteString("Docker Desktop is stopped. Its containers stop with it.\n")
+		b.WriteString("Docker Desktop stops, and its containers with it.\n")
 	} else {
 		b.WriteString("Docker Desktop is not running.\n")
 	}

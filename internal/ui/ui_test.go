@@ -3,6 +3,7 @@ package ui
 import (
 	"context"
 	"errors"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -226,5 +227,16 @@ func TestSummaryListsFailures(t *testing.T) {
 		if !strings.Contains(s, want) {
 			t.Errorf("summary does not contain %q:\n%s", want, s)
 		}
+	}
+}
+
+func TestFilterTurnsAnInterruptIntoCtrlC(t *testing.T) {
+	got := Filter(nil, tea.InterruptMsg{})
+	key, ok := got.(tea.KeyMsg)
+	if !ok || key.String() != "ctrl+c" {
+		t.Fatalf("Filter(InterruptMsg{}) = %#v", got)
+	}
+	if got := Filter(nil, enter); !reflect.DeepEqual(got, tea.Msg(enter)) {
+		t.Fatalf("Filter changed an unrelated message: %#v", got)
 	}
 }
