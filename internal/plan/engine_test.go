@@ -123,6 +123,34 @@ func TestACriticalStepIgnoresAnInterruptWhileItRuns(t *testing.T) {
 	}
 }
 
+// Any step cut off partway can leave things half done, so every step that has
+// started finishes. The interrupt still skips the steps after it.
+func TestAnyStepIgnoresAnInterruptWhileItRuns(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	stillLive := false
+	steps := []Step{
+		{ID: "cache:Ubuntu:npm", Title: "npm cache", Phase: PhaseWSLCaches},
+		{ID: "docker:buildcache", Title: "Build cache", Phase: PhaseDocker},
+	}
+	ex := &fakeExecutor{onRun: func(stepCtx context.Context, s Step) {
+		if s.ID == "cache:Ubuntu:npm" {
+			cancel()
+			stillLive = stepCtx.Err() == nil
+		}
+	}}
+	outs := Run(ctx, steps, ex, Hooks{})
+	if !stillLive {
+		t.Fatal("the running step's context was cancelled")
+	}
+	if outs[0].Status != Done {
+		t.Errorf("status = %v", outs[0].Status)
+	}
+	if outs[1].Status != Skipped || !strings.Contains(outs[1].Reason, "stopped before this step started") {
+		t.Errorf("next step = %v %q", outs[1].Status, outs[1].Reason)
+	}
+}
+
 func TestHooksSeeEveryStep(t *testing.T) {
 	started, finished := 0, 0
 	outs := Run(context.Background(), twoDisks(), &fakeExecutor{}, Hooks{

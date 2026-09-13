@@ -49,8 +49,8 @@ type Hooks struct {
 // Run executes steps in order. A failed step does not stop the run: steps that
 // do not depend on it carry on, and steps that do are skipped with a reason
 // naming it. An interrupt, meaning ctx ending, stops the run before the next
-// step starts. A Critical step already running gets a context that ignores the
-// interrupt, so a compaction is never cut off partway.
+// step starts. Every step gets a context that ignores the interrupt, so a step
+// that has started always finishes, and a compaction is never cut off partway.
 func Run(ctx context.Context, steps []Step, ex Executor, h Hooks) []Outcome {
 	status := map[string]Status{}
 	titles := map[string]string{}
@@ -68,11 +68,7 @@ func Run(ctx context.Context, steps []Step, ex Executor, h Hooks) []Outcome {
 		case unmet(s, status, titles) != "":
 			o.Status, o.Reason = Skipped, unmet(s, status, titles)
 		default:
-			stepCtx := ctx
-			if s.Critical {
-				stepCtx = context.WithoutCancel(ctx)
-			}
-			freed, err := ex.Execute(stepCtx, s)
+			freed, err := ex.Execute(context.WithoutCancel(ctx), s)
 			if err != nil {
 				o.Status, o.Err = Failed, err
 			} else {

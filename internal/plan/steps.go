@@ -26,7 +26,7 @@ type Step struct {
 	Item      Item
 	DependsOn []string // every one must have finished
 	AnyOf     []string // at least one must have finished
-	Critical  bool     // runs to completion even after an interrupt
+	Critical  bool     // stopping it partway can corrupt a disk, which the interface warns about
 }
 
 // Steps turns the selection into the order it runs in. The order is fixed:
