@@ -224,7 +224,7 @@ func (s *scanner) distro(ctx context.Context, d wsl.Distro) {
 	it := s.disk("compact:"+d.Name, d.Name, d.Name, d.VhdFile, size, used)
 	it.Distro = d.Name
 	if !d.Running {
-		it.Detail = plan.Human(size) + " file. " + d.Name + " is stopped, so it is started to be trimmed."
+		it.Detail = d.Name + " is stopped, so it's started for the trim"
 	}
 	s.disks = append(s.disks, it)
 	s.report(d.Name, nil)

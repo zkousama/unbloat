@@ -258,6 +258,10 @@ func TestAStoppedDistroIsNeverStarted(t *testing.T) {
 	if !ok || ubuntu.Frees != 0 {
 		t.Errorf("a stopped distro's disk is offered with an unknown estimate, got %+v", ubuntu)
 	}
+	// The row already shows the file size, so the detail doesn't repeat it.
+	if !strings.Contains(ubuntu.Detail, "Ubuntu is stopped") || strings.Contains(ubuntu.Detail, "file") {
+		t.Errorf("detail = %q", ubuntu.Detail)
+	}
 }
 
 func TestNothingFromDockerWhenItIsNotRunning(t *testing.T) {
