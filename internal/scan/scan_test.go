@@ -152,6 +152,30 @@ func TestDockerDesktopIsNotTreatedAsADistro(t *testing.T) {
 	}
 }
 
+func TestOlderDockerDesktopsDataDistroIsNotADistroEither(t *testing.T) {
+	f := recordedMachine(t).
+		On(run.Out("Ubuntu\ndocker-desktop\ndocker-desktop-data\n"), "wsl.exe", "--list", "--quiet").
+		On(run.Out("Ubuntu\ndocker-desktop\ndocker-desktop-data\n"), "wsl.exe", "--list", "--running", "--quiet")
+	p := Scan(context.Background(), sources(t, f, &sys.FakeFacts{IsElevated: true}), nil)
+
+	for _, it := range p.Items {
+		if strings.Contains(it.ID, "docker-desktop-data") || strings.Contains(it.Section, "docker-desktop-data") {
+			t.Errorf("item %s in %q", it.ID, it.Section)
+		}
+	}
+	if len(p.Running) != 1 || p.Running[0] != "Ubuntu" {
+		t.Errorf("running = %v", p.Running)
+	}
+	for _, call := range f.Calls() {
+		if strings.HasPrefix(call, "wsl.exe -d docker-desktop-data") {
+			t.Errorf("ran %q", call)
+		}
+	}
+	if _, ok := find(p, "compact:docker"); !ok {
+		t.Error("Docker's data disk is no longer found")
+	}
+}
+
 func TestNoVolumeIsEverSelectable(t *testing.T) {
 	p := Scan(context.Background(), sources(t, recordedMachine(t), &sys.FakeFacts{IsElevated: true}), nil)
 	vols, _ := find(p, "docker:volumes")

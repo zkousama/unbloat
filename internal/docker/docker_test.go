@@ -98,6 +98,21 @@ func TestAnotherEngineIsNotDockerDesktopRunning(t *testing.T) {
 	}
 }
 
+// Older Docker Desktop registers a second distro for its data.
+func TestIsDockerDistro(t *testing.T) {
+	for name, want := range map[string]bool{
+		"docker-desktop":      true,
+		"docker-desktop-data": true,
+		"Ubuntu":              false,
+		"docker-desktop-2":    false,
+		"":                    false,
+	} {
+		if got := IsDockerDistro(name); got != want {
+			t.Errorf("IsDockerDistro(%q) = %v, want %v", name, got, want)
+		}
+	}
+}
+
 func TestClientCommands(t *testing.T) {
 	f := run.NewFake().
 		On(run.Out(fixture(t, "system-df.jsonl")), exe, "system", "df", "--format", "{{json .}}").

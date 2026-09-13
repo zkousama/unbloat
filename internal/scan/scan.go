@@ -69,7 +69,7 @@ func Scan(ctx context.Context, src Sources, report Report) plan.Plan {
 	s.windows(ctx)
 	distros := s.distros(ctx)
 	for _, d := range distros {
-		if d.Name != docker.DistroName {
+		if !docker.IsDockerDistro(d.Name) {
 			s.distro(ctx, d)
 		}
 	}
@@ -161,7 +161,7 @@ func (s *scanner) distros(ctx context.Context) []wsl.Distro {
 		return nil
 	}
 	for _, d := range distros {
-		if d.Running && d.Name != docker.DistroName {
+		if d.Running && !docker.IsDockerDistro(d.Name) {
 			s.running = append(s.running, d.Name)
 		}
 	}

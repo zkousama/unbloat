@@ -11,6 +11,12 @@ import (
 // DistroName is the WSL distro Docker Desktop runs in.
 const DistroName = "docker-desktop"
 
+// IsDockerDistro reports whether a distro belongs to Docker Desktop:
+// DistroName, or docker-desktop-data, which older releases also register.
+func IsDockerDistro(name string) bool {
+	return name == DistroName || name == "docker-desktop-data"
+}
+
 // DataMount is where Docker's data disk is mounted inside DistroName, which is
 // where it has to be trimmed.
 const DataMount = "/mnt/docker-desktop-disk"
