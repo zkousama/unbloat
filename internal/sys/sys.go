@@ -10,12 +10,14 @@ type Power struct {
 
 // PowerFrom reads GetSystemPowerStatus. An AC line status of 0 is battery, 1
 // is mains and 255 unknown. A battery flag of 128 means there is no battery,
-// which is a desktop and always safe. A percentage of 255 is unknown.
+// which is a desktop and always safe. A percentage of 255 is unknown. An
+// unknown line status counts as battery, so the shutdown gate refuses unless
+// the charge is known and at least 50%.
 func PowerFrom(acLine, batteryFlag, percent byte) Power {
 	if batteryFlag == 128 {
 		return Power{OnBattery: false, Percent: 100, Known: true}
 	}
-	p := Power{OnBattery: acLine == 0}
+	p := Power{OnBattery: acLine != 1}
 	if percent <= 100 {
 		p.Percent = int(percent)
 		p.Known = true

@@ -43,7 +43,8 @@ type systemPowerStatus struct {
 func (Machine) Power() Power {
 	var s systemPowerStatus
 	if r, _, _ := procGetSystemPowerStatus.Call(uintptr(unsafe.Pointer(&s))); r == 0 {
-		return Power{}
+		// Unknown power state: treat as battery so the shutdown gate refuses.
+		return Power{OnBattery: true}
 	}
 	return PowerFrom(s.ACLineStatus, s.BatteryFlag, s.BatteryLifePercent)
 }
