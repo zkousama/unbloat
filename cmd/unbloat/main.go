@@ -62,7 +62,7 @@ func start() int {
 	}
 	defer logFile.Close()
 
-	runner := &run.Exec{Log: logFile}
+	runner := &run.Exec{Log: logFile, Dir: os.Getenv("SystemRoot")}
 	facts := sys.Machine{}
 	wslClient := wsl.Client{R: runner}
 	exists := func(p string) bool { _, ok := stat(p); return ok }

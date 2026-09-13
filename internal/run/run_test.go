@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -14,12 +15,36 @@ import (
 // this environment variable set, so they have a real child process that exits
 // with a known code on every OS.
 func TestHelperProcess(t *testing.T) {
-	if os.Getenv("UNBLOAT_HELPER") != "1" {
-		return
+	switch os.Getenv("UNBLOAT_HELPER") {
+	case "1":
+		fmt.Fprint(os.Stdout, "out")
+		fmt.Fprint(os.Stderr, "err")
+		os.Exit(3)
+	case "pwd":
+		wd, _ := os.Getwd()
+		fmt.Fprint(os.Stdout, wd)
+		os.Exit(0)
 	}
-	fmt.Fprint(os.Stdout, "out")
-	fmt.Fprint(os.Stderr, "err")
-	os.Exit(3)
+}
+
+// A command started from a working directory that has since vanished can
+// fail, so the runner starts every command from a directory it's given.
+func TestExecRunsInDir(t *testing.T) {
+	t.Setenv("UNBLOAT_HELPER", "pwd")
+	self, err := os.Executable()
+	if err != nil {
+		t.Fatal(err)
+	}
+	dir := t.TempDir()
+	res, err := (&Exec{Dir: dir}).Run(context.Background(), self, "-test.run=TestHelperProcess")
+	if err != nil || res.Code != 0 {
+		t.Fatalf("code %d, %v", res.Code, err)
+	}
+	want, _ := filepath.EvalSymlinks(dir)
+	got, _ := filepath.EvalSymlinks(string(res.Stdout))
+	if got != want {
+		t.Fatalf("ran in %q, want %q", res.Stdout, dir)
+	}
 }
 
 func TestExecReportsANonZeroExitAsAResult(t *testing.T) {

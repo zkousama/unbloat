@@ -32,12 +32,19 @@ type Runner interface {
 // Exec runs real commands and writes each one, with its output, to Log.
 type Exec struct {
 	Log io.Writer
+	Dir string // the working directory for every command, when set
 	mu  sync.Mutex
 }
 
 func (e *Exec) Run(ctx context.Context, name string, args ...string) (Result, error) {
 	cmd := exec.CommandContext(ctx, name, args...)
 	detach(cmd)
+	if e.Dir != "" {
+		cmd.Dir = e.Dir
+	}
+	// A grandchild that inherits the output pipe, such as a distro wsl.exe
+	// starts, must not keep Wait blocked after the command itself has exited.
+	cmd.WaitDelay = 10 * time.Second
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
