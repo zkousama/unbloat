@@ -8,7 +8,7 @@ WSL and Docker keep everything in virtual disk files that grow and don't shrink.
 
 - npm, npx and pip caches inside each running distro, and the pnpm store through `pnpm store prune`, which only removes packages no project references
 - Docker's build cache, and images no container uses (unticked by default, since they're downloaded again when needed)
-- files in `%TEMP%` older than 7 days, and the npm, pnpm and yarn caches on Windows
+- files in `%TEMP%` older than 7 days, and the npm, npx, pnpm and yarn caches on Windows
 - the virtual disks: each distro's `ext4.vhdx` and Docker's `docker_data.vhdx`
 
 Docker volumes are never offered, named or anonymous. The official Postgres image keeps its data in an anonymous volume unless you give it a name.
@@ -46,7 +46,7 @@ Every command and its output is logged to `%LOCALAPPDATA%\unbloat\logs`.
 
 For each disk you tick:
 
-1. `fstrim` runs as root inside the distro that owns the disk while it's still running. Docker's disk is trimmed from inside `docker-desktop`.
+1. `fstrim` runs as root inside the distro that owns the disk, and a stopped distro is started for it. Docker's disk is trimmed from inside `docker-desktop`.
 2. `docker desktop stop`, then `wsl --shutdown`. If Docker Desktop doesn't stop, WSL is left running and nothing is compacted.
 3. The disk file is checked for anything still holding it open.
 4. `Optimize-VHD -Mode Full` where Windows has it, and `diskpart` with the disk attached read-only on Home editions.
